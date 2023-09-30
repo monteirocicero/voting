@@ -23,9 +23,35 @@ type voteRequest struct {
 }
 
 type VoteDb struct {
-	Id int
 	Name string
-	Creation *time.Time
+	QtdVotes int
+}
+
+type VoteResponse struct {
+	Name string `json:"name"`
+	Votes float64 `json:"votes"`
+}
+
+func calculate(votedb []VoteDb) ([]VoteResponse) {
+
+	var total = 0
+	var result []VoteResponse
+	
+
+	for _, vote := range votedb {
+		total += vote.QtdVotes
+	}
+
+	for _, vote := range votedb {
+		println(vote.Name)
+		println(vote.QtdVotes)
+		v := VoteResponse{Name: vote.Name, Votes: (float64(vote.QtdVotes)/float64(total))*100 }
+
+		result = append(result, v)
+	}
+
+	return result
+
 }
 
 func postVote(c *gin.Context) {
@@ -64,6 +90,7 @@ func postVote(c *gin.Context) {
 			false,  // mandatory
 			false,  // immediate
 			amqp.Publishing{
+				    DeliveryMode: amqp.Persistent,
 					ContentType: "text/plain",
 					Body:        []byte(body),
 			})
@@ -76,9 +103,9 @@ func postVote(c *gin.Context) {
 }
 
 func getVotes(c *gin.Context) {
-	connStr := "postgres://postgres:postgres@localhost/votedb?sslmode=disable"
+	connStr := "postgres://postgres:postgres@172.17.0.3/votedb?sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
-	rows, err := db.Query("SELECT id, name, dat_creation FROM votes")
+	rows, err := db.Query("SELECT name, count(*) as qtdVotes FROM public.votes GROUP by name")
 
 	if err != nil {
 		log.Fatal(err)
@@ -86,19 +113,23 @@ func getVotes(c *gin.Context) {
 
 	defer rows.Close()
 
+	var votes []VoteDb
+
 	for rows.Next() {
 		var vdb VoteDb
 		
-		if err := rows.Scan(&vdb.Id, &vdb.Name, &vdb.Creation); err != nil {
+		if err := rows.Scan(&vdb.Name, &vdb.QtdVotes); err != nil {
 			log.Fatalf("error %v: %q", &vdb.Name, err)
 		}
 
-		log.Print("vote detail:\n Id: ", vdb.Id, "Name: ", vdb.Name, "Creation: ", vdb.Creation.String())
+		votes = append(votes, vdb)
+		
 	}
 
-	if err != nil {
-		log.Fatal(err)
-	}
+	calculate(votes)
+
+	
+	c.IndentedJSON(http.StatusCreated, calculate(votes))
 }
 
 func main() {

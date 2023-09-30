@@ -14,7 +14,7 @@ func failOnError(err error, msg string) {
 }
 
 func save(name string) {
-	 connStr := "postgres://postgres:postgres@localhost/votedb?sslmode=disable"
+	 connStr := "postgres://postgres:postgres@172.17.0.3/votedb?sslmode=disable"
 	 db, err := sql.Open("postgres", connStr)
 
 	 if err != nil {
@@ -52,8 +52,8 @@ func main() {
 	failOnError(err, "Failed to declare an exchange")
 
 	q, err := ch.QueueDeclare(
-		"",    // name
-		false, // durable
+		"votes_queue",    // name
+		true, // durable
 		false, // delete when unused
 		true,  // exclusive
 		false, // no-wait
@@ -73,7 +73,7 @@ func main() {
 	msgs, err := ch.Consume(
 		q.Name, // queue
 		"",     // consumer
-		true,   // auto-ack
+		false,   // auto-ack
 		false,  // exclusive
 		false,  // no-local
 		false,  // no-wait
@@ -87,7 +87,7 @@ func main() {
 		for d := range msgs {
 			log.Printf(" [x] %s", d.Body)
 			save(string(d.Body))
-
+			d.Ack(false)
 		}
 	}()
 
